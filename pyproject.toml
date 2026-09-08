@@ -1,6 +1,6 @@
 [project]
 name = "kicad-callouts"
-version = "0.1.0"
+version = "0.1.1"
 description = "Static annotated 3D board images with labelled callouts, from a KiCad PCB."
 readme = "README.md"
 authors = [
