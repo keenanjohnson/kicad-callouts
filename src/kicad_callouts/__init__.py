@@ -13,7 +13,6 @@ default install locations on macOS and Windows.
 """
 import argparse, base64, glob, html, math, os, re, shutil, subprocess, sys, tempfile, textwrap
 import xml.etree.ElementTree as ET
-from collections import Counter
 from PIL import Image
 
 RENDER_W = 2400     # px; the 3D render is downsampled into the final image
@@ -38,10 +37,13 @@ def find_kicad_cli():
 
 # --- Callout text from footprint properties ---------------------------------
 
+TOKEN = re.compile(r'\(|\)|"(?:\\.|[^"\\])*"|[^\s()"]+')
+
+
 def sexp(text):
     """Parse an s-expression file into nested lists; atoms are strings."""
     stack = [[]]
-    for t in re.findall(r'\(|\)|"(?:\\.|[^"\\])*"|[^\s()"]+', text):
+    for t in TOKEN.findall(text):
         if t == "(":
             stack.append([])
         elif t == ")":
@@ -62,6 +64,27 @@ def read_callouts(pcb):
                 items.append(dict(ref=props.get("Reference", "?"), name=props["Callout"],
                                   description=props.get("Callout Description", "")))
     return items
+
+
+def strip_models(text):
+    """Return the board file text with every footprint's (model ...) block removed."""
+    out, pos, depth, head, start = [], 0, 0, False, None
+    for m in TOKEN.finditer(text):
+        t = m.group()
+        if t == "(":
+            depth += 1
+            open_at, head = m.start(), True
+            continue
+        if t == ")":
+            depth -= 1
+            if start is not None and depth == 2:
+                out.append(text[pos:start])
+                pos, start = m.end(), None
+        elif head and t == "model" and depth == 3 and start is None:
+            start = open_at
+        head = False
+    out.append(text[pos:])
+    return "".join(out)
 
 
 # --- Board geometry via IPC-2581 -------------------------------------------
@@ -93,8 +116,9 @@ def read_board(kicad_cli, pcb, xml_path):
         cx, cy = float(loc.get("x")), float(loc.get("y"))
         xform = comp.find(tag("Xform"))
         rot = math.radians(float(xform.get("rotation", 0))) if xform is not None else 0.0
+        mx = -1 if xform is not None and xform.get("mirror") == "true" else 1  # back-side parts: rotate, then mirror X
         c, s = math.cos(rot), math.sin(rot)
-        world = [(cx + x * c - y * s, -(cy + x * s + y * c)) for x, y in packages[comp.get("packageRef")]]
+        world = [(cx + mx * (x * c - y * s), -(cy + x * s + y * c)) for x, y in packages[comp.get("packageRef")]]
         fps[comp.get("refDes")] = (cx, -cy, (min(x for x, _ in world), min(y for _, y in world),
                                              max(x for x, _ in world), max(y for _, y in world)))
     return outline, fps
@@ -108,25 +132,23 @@ def render_board(kicad_cli, pcb, out, aspect):
     the pixel coordinates of the board outline and content_bbox is the extent
     of everything rendered, including parts overhanging the outline.  The
     renderer does not expose its camera maths, so the outline is measured from
-    the image: the board edge is the most common row extent, and the top/bottom
-    are taken from columns near the board sides where no part overhangs the edge."""
+    a second render of the board with its 3D models removed: the camera frames
+    the board edges alone, so both renders share the same scale and offset."""
+    bare = os.path.join(os.path.dirname(out), "bare.kicad_pcb")
+    open(bare, "w", encoding="utf-8").write(strip_models(open(pcb, encoding="utf-8").read()))
+    bare_png = os.path.join(os.path.dirname(out), "bare.png")
     h = int(RENDER_W * aspect * 1.2)  # extra room for parts overhanging top/bottom
-    subprocess.run([kicad_cli, "pcb", "render", "-o", out, "--side", "top", "--background", "transparent",
-                    "--quality", "basic", "--zoom", "0.8", "-w", str(RENDER_W), "-h", str(h), pcb],
-                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    mask = Image.open(out).convert("RGBA").split()[3].point(lambda v: 255 if v > 128 else 0)
-    W, H = mask.size
-    rows = [b for y in range(H) if (b := mask.crop((0, y, W, y + 1)).getbbox())]
-    left = Counter(b[0] for b in rows).most_common(1)[0][0]
-    right = Counter(b[2] for b in rows).most_common(1)[0][0] - 1
-    bw = right - left
-    side_cols = [x for x in range(left, right) if 0.1 * bw < (x - left) < 0.2 * bw or 0.8 * bw < (x - left) < 0.9 * bw]
-    col_boxes = [b for x in side_cols if (b := mask.crop((x, 0, x + 1, H)).getbbox())]
-    tops, bots = [b[1] for b in col_boxes], [b[3] - 1 for b in col_boxes]
-    full = mask.getbbox()
+    for src, dst in ((pcb, out), (bare, bare_png)):
+        subprocess.run([kicad_cli, "pcb", "render", "-o", dst, "--side", "top", "--background", "transparent",
+                        "--quality", "basic", "--zoom", "0.8", "-w", str(RENDER_W), "-h", str(h), src],
+                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    mask = lambda path: Image.open(path).convert("RGBA").split()[3].point(lambda v: 255 if v > 128 else 0)
+    full = mask(out).getbbox()
+    W, H = Image.open(out).size
     if full[0] == 0 or full[1] == 0 or full[2] == W or full[3] == H:
         print("warning: render is clipped at the image edge", file=sys.stderr)
-    return open(out, "rb").read(), left, min(tops), right, max(bots), full
+    left, top, right, bottom = mask(bare_png).getbbox()
+    return open(out, "rb").read(), left, top, right - 1, bottom - 1, full
 
 
 def esc(s):
