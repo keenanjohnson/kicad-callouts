@@ -9,7 +9,7 @@ Give it a `.kicad_pcb` file in which the footprints you want called out carry a 
 With [uv](https://docs.astral.sh/uv/):
 
 ```
-uv tool install git+https://github.com/keenanjohnson/kicad-callouts
+uv tool install kicad-callouts
 ```
 
 ## Usage
