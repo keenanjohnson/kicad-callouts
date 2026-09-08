@@ -1,13 +1,15 @@
 [project]
 name = "kicad-callouts"
 version = "0.1.0"
-description = ""Static annotated 3D board images with labelled callouts, from a KiCad PCB.""
+description = "Static annotated 3D board images with labelled callouts, from a KiCad PCB."
 readme = "README.md"
 authors = [
     { name = "Keenan Johnson", email = "keenan@breadboardfoundry.com" }
 ]
 requires-python = ">=3.9"
-dependencies = ["pillow"]
+dependencies = [
+    "pillow",
+]
 
 [project.scripts]
 kicad-callouts = "kicad_callouts:main"
