@@ -6,8 +6,8 @@ readme = "README.md"
 authors = [
     { name = "Keenan Johnson", email = "keenan@breadboardfoundry.com" }
 ]
-requires-python = ">=3.13"
-dependencies = []
+requires-python = ">=3.9"
+dependencies = ["pillow"]
 
 [project.scripts]
 kicad-callouts = "kicad_callouts:main"
