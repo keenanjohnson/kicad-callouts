@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Render an annotated 3D top view of a KiCad PCB with a callout for each connector.
 
-    python3 tools/connector_doc.py board.kicad_pcb connectors.csv -o docs/connectors.png
+    kicad-callouts board.kicad_pcb -o docs/connectors.png
 
-connectors.csv columns: ref,name,description
+Every footprint with a non-empty "Callout" property gets a callout; the optional
+"Callout Description" property supplies the longer text under the label.
 
 Requires: KiCad 9+ (for `kicad-cli pcb render`), Pillow, and rsvg-convert for
 PNG/PDF output (`brew install librsvg` / `apt install librsvg2-bin`).
 `kicad-cli` is found from the KICAD_CLI environment variable, PATH, or the
 default install locations on macOS and Windows.
 """
-import argparse, base64, csv, glob, html, math, os, shutil, subprocess, sys, tempfile, textwrap
+import argparse, base64, glob, html, math, os, re, shutil, subprocess, sys, tempfile, textwrap
 import xml.etree.ElementTree as ET
 from collections import Counter
 from PIL import Image
@@ -33,6 +34,34 @@ def find_kicad_cli():
         if c and os.path.exists(c):
             return c
     sys.exit("kicad-cli not found: add it to PATH or set KICAD_CLI")
+
+
+# --- Callout text from footprint properties ---------------------------------
+
+def sexp(text):
+    """Parse an s-expression file into nested lists; atoms are strings."""
+    stack = [[]]
+    for t in re.findall(r'\(|\)|"(?:\\.|[^"\\])*"|[^\s()"]+', text):
+        if t == "(":
+            stack.append([])
+        elif t == ")":
+            node = stack.pop()
+            stack[-1].append(node)
+        else:
+            stack[-1].append(re.sub(r'\\(.)', lambda m: "\n" if m[1] == "n" else m[1], t[1:-1]) if t[0] == '"' else t)
+    return stack[0][0]
+
+
+def read_callouts(pcb):
+    """Return [{ref, name, description}] for each footprint with a non-empty "Callout" property."""
+    items = []
+    for node in sexp(open(pcb, encoding="utf-8").read()):
+        if isinstance(node, list) and node[:1] == ["footprint"]:
+            props = {n[1]: n[2] for n in node if isinstance(n, list) and n[:1] == ["property"] and len(n) > 2}
+            if props.get("Callout"):
+                items.append(dict(ref=props.get("Reference", "?"), name=props["Callout"],
+                                  description=props.get("Callout Description", "")))
+    return items
 
 
 # --- Board geometry via IPC-2581 -------------------------------------------
@@ -107,14 +136,15 @@ def esc(s):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("pcb")
-    ap.add_argument("csv")
     ap.add_argument("-o", "--out", default="connectors.png", help=".png or .pdf (via rsvg-convert), or .svg")
     ap.add_argument("--dpi", type=int, default=300)
     ap.add_argument("--title", default=None)
     a = ap.parse_args()
 
     kicad_cli = find_kicad_cli()
-    rows = list(csv.DictReader(open(a.csv, encoding="utf-8")))
+    rows = read_callouts(a.pcb)
+    if not rows:
+        sys.exit(f'no footprints with a "Callout" property in {a.pcb}')
     with tempfile.TemporaryDirectory() as td:
         (ox, oy, ex, ey), fps = read_board(kicad_cli, a.pcb, os.path.join(td, "board.xml"))
         bw, bh = ex - ox, ey - oy
