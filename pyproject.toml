@@ -6,10 +6,27 @@ readme = "README.md"
 authors = [
     { name = "Keenan Johnson", email = "keenan@breadboardfoundry.com" }
 ]
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.9"
+keywords = ["kicad", "pcb", "documentation", "datasheet", "render"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+    "Topic :: Documentation",
+]
 dependencies = [
     "pillow",
 ]
+
+[project.urls]
+Homepage = "https://github.com/keenanjohnson/kicad-callouts"
+Issues = "https://github.com/keenanjohnson/kicad-callouts/issues"
 
 [project.scripts]
 kicad-callouts = "kicad_callouts:main"
