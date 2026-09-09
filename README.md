@@ -4,6 +4,14 @@ Generate a static, annotated top-down 3D image of a KiCad PCB with a labelled ca
 
 Give it a `.kicad_pcb` file in which the footprints you want called out carry a `Callout` property. It renders the board with KiCad, draws a red box around each listed footprint, adds a leader line to a label box on the nearest side of the board, and adds overall board dimensions. The result is a PNG, PDF, or SVG suitable for a datasheet, README, or assembly guide.
 
+![Example output: a small demo board with seven labelled callouts](https://raw.githubusercontent.com/keenanjohnson/kicad-callouts/main/docs/example.png)
+
+The image above was made from the sample board in [docs/demo/](docs/demo/) with:
+
+```
+kicad-callouts docs/demo/demo.kicad_pcb -o docs/example.png --title "Demo board"
+```
+
 ## Install
 
 With [uv](https://docs.astral.sh/uv/):

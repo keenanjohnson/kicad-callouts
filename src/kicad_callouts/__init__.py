@@ -196,7 +196,7 @@ def main():
         def place(col, x0):
             ys = []
             for i in col:
-                y = i["y"] + board_y - BOX_H / 2
+                y = max(MARGIN + TITLE_H, i["y"] + board_y - BOX_H / 2)  # keep clear of the title
                 if ys and y < ys[-1] + BOX_H + 2:
                     y = ys[-1] + BOX_H + 2
                 ys.append(y)
