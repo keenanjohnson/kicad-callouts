@@ -155,6 +155,40 @@ def esc(s):
     return html.escape(s, quote=True)
 
 
+def crosses(p, q, r, s):
+    """True if segments pq and rs cross at a point interior to both."""
+    side = lambda a, b, c: (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+    return side(p, q, r) * side(p, q, s) < 0 and side(r, s, p) * side(r, s, q) < 0
+
+
+def place(col, x0, ax, board_x, board_y):
+    """Stack one column of callout boxes with their left edge at x0 and set each
+    item's "box" to its top-left corner.  ax is the x of the box edge the leaders
+    leave from.  Reorders col top to bottom."""
+    # Top to bottom by footprint; at equal heights the footprint nearest the column goes first.
+    col.sort(key=lambda i: (i["y"], abs(board_x + i["x"] - ax)))
+    ys = []
+    for i in col:
+        y = max(MARGIN + TITLE_H, i["y"] + board_y - BOX_H / 2)  # keep clear of the title
+        if ys and y < ys[-1] + BOX_H + 2:
+            y = ys[-1] + BOX_H + 2
+        ys.append(y)
+    # Footprints at nearly the same height can still cross once boxes are pushed
+    # down.  Swap the boxes of any two crossing leaders until none cross; each
+    # swap shortens the total leader length, so this terminates.
+    leader = lambda n: ((ax, ys[n] + BOX_H / 2), (board_x + col[n]["x"], board_y + col[n]["y"]))
+    swapped = True
+    while swapped:
+        swapped = False
+        for a in range(len(col)):
+            for b in range(a + 1, len(col)):
+                if crosses(*leader(a), *leader(b)):
+                    col[a], col[b] = col[b], col[a]
+                    swapped = True
+    for i, y in zip(col, ys):
+        i["box"] = (x0, y)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("pcb")
@@ -184,26 +218,16 @@ def main():
             items.append(dict(r, x=fx - ox, y=fy - oy, bx=l - ox, by=t - oy, bwid=rr - l, bhgt=b - t))
 
         # Put each callout on the side of the board nearest to it, stacked top to bottom.
-        left = sorted([i for i in items if i["x"] < bw / 2], key=lambda i: i["y"])
-        right = sorted([i for i in items if i["x"] >= bw / 2], key=lambda i: i["y"])
+        left = [i for i in items if i["x"] < bw / 2]
+        right = [i for i in items if i["x"] >= bw / 2]
         over_top, over_bot = (pt - full[1]) / scale, (full[3] - pb) / scale  # parts overhanging the outline, mm
         board_x = MARGIN + COL_W + GAP
         board_y = MARGIN + TITLE_H + over_top
         W = board_x + bw + GAP + COL_W + MARGIN
         dim_y = board_y + bh + over_bot + 5  # width dimension line, below any overhang
-        H = max(dim_y + 4, board_y + max(len(left), len(right)) * (BOX_H + 3)) + MARGIN
-
-        def place(col, x0):
-            ys = []
-            for i in col:
-                y = max(MARGIN + TITLE_H, i["y"] + board_y - BOX_H / 2)  # keep clear of the title
-                if ys and y < ys[-1] + BOX_H + 2:
-                    y = ys[-1] + BOX_H + 2
-                ys.append(y)
-                i["box"] = (x0, y)
-
-        place(left, MARGIN)
-        place(right, board_x + bw + GAP)
+        place(left, MARGIN, MARGIN + COL_W, board_x, board_y)
+        place(right, board_x + bw + GAP, board_x + bw + GAP, board_x, board_y)
+        H = max(dim_y + 4, max(i["box"][1] for i in items) + BOX_H) + MARGIN
 
         title = a.title or os.path.splitext(os.path.basename(a.pcb))[0]
         rev = subprocess.run(["git", "-C", os.path.dirname(os.path.abspath(a.pcb)), "rev-parse", "--short", "HEAD"],

@@ -50,7 +50,7 @@ The easiest place to set them is the schematic: add the fields to each symbol (S
 
 ### Layout
 
-Callouts are placed in a column on whichever side of the board the footprint is closer to, ordered top to bottom by the footprint's position. Boxes that would overlap are pushed down. Callout text can be any footprint, not just connectors, so the same tool works for switches, LEDs, test points, or mounting holes.
+Callouts are placed in a column on whichever side of the board the footprint is closer to, ordered top to bottom by the footprint's position. Boxes that would overlap are pushed down, and footprints at the same or nearly the same height are ordered so that their leader lines do not cross. Callout text can be any footprint, not just connectors, so the same tool works for switches, LEDs, test points, or mounting holes.
 
 ## License
 
